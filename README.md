@@ -1,25 +1,29 @@
 # Wacky Workshops.io
 
-An engaging real-time multiplayer game where players compete in hilarious workshops to collect items and thrive. The unique mechanic revolves around player interaction and strategic item collection.
+## Play Now
+[Play Wacky Workshops.io](https://caytec.github.io/wacky-workshops-io/)
 
-## How to Play
-- Use WASD to move your character around the game world.
-- Click the mouse to attack and collect items scattered throughout the environment.
+![Image](PLACEHOLDER_FOR_SCREENSHOT_1)  
+![Image](PLACEHOLDER_FOR_SCREENSHOT_2)  
+![Image](PLACEHOLDER_FOR_SCREENSHOT_3)  
 
-## Setup
-1. Run `npm install` to install all dependencies.
-2. Execute `node server.js` to start the server.
-3. Open `index.html` in your browser to join the game.
+### Hook
+Welcome to Wacky Workshops! Dive into a chaotic world where mini-games and creativity collide. Compete with other players to craft bizarre inventions from quirky collected items. Join the fun and unleash your imagination!
 
-## Tech Stack
-- Node.js
-- Socket.io
-- SQLite
-- HTML5 Canvas
+### Game Features
+- **Multiplayer Gameplay:** Chat, cooperate, or compete with friends in crafting competitions.
+- **Varied Mini-Games:** Test your skills across different mini-games and gather unique materials.
+- **Creative Crafting System:** Use gathered materials to create unique inventions and battle it out with competitors!
 
-## Features
-- Real-time multiplayer interactions
-- SQLite persistence for player data
-- Global leaderboard to showcase top players
-- AI bots to add challenge
-- Client-side prediction for smoother gameplay.
+### Screenshots
+- ![Screenshot 1](PLACEHOLDER_FOR_SCREENSHOT_1)
+- ![Screenshot 2](PLACEHOLDER_FOR_SCREENSHOT_2)
+- ![Screenshot 3](PLACEHOLDER_FOR_SCREENSHOT_3)
+
+### Badges
+- Players Online: ![Players Badge](URL_TO_PLAYERS_ONLINE_BADGE)
+- License: MIT
+- Tech Stack: Node.js, Socket.io, HTML5
+
+### Contact
+For inquiries, feel free to reach out to me at [myemail@example.com].
