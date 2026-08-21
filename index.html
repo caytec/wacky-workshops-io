@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wacky Workshops.io</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <style>
+        body {
+            background-color: #0d0d1a;
+            color: white;
+            font-family: 'Cinzel', serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #lobby {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        #nameInput, #joinButton {
+            margin: 10px;
+            color: gold;
+        }
+        #globalLeaderboard {
+            position: absolute;
+            top: 100px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            width: 200px;
+        }
+        #deathScreen, #countdown, #reconnectOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8);
+            flex-direction: column;
+            color: gold;
+            display: none;
+        }
+        #deathScreen h1,
+        #countdown h1 {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="lobby">
+        <h1>Wacky Workshops.io</h1>
+        <input type="text" id="nameInput" placeholder="Enter your name" />
+        <button id="joinButton">Join Game</button>
+    </div>
+    
+    <div id="globalLeaderboard"></div>
+    
+    <div id="deathScreen">
+        <h1>YOU DIED</h1>
+        <p id="finalScoreText"></p>
+        <p id="bestScoreText"></p>
+        <button id="respawnBtn">Respawn</button>
+        <button id="lobbyBtn">Return to Lobby</button>
+    </div>
+    
+    <div id="countdown">
+        <h1 id="countdownText"></h1>
+    </div>
+    
+    <div id="reconnectOverlay">
+        <h1>Reconnecting...</h1>
+    </div>
+
+    <script>
+        let gameState = 'lobby';
+        const socket = io();
+        let playerId = null;
+        let roomId = null;
+        let playerProfile = { level: 1, xp: 0, allTimeScore: 0, gamesPlayed: 0 };
+        let predictedX = 1500;
+        let predictedY = 1500;
+        let playerHp = 100;
+        const playerMaxHp = 100;
+        let playerScore = 0;
+        let playerXp = 0;
+        let playerLevel = 1;
+        let ping = 0;
+        let pingStart = 0;
+        let gameTimer = 600;
+        let leaderboard = [];
+        let particles = [];
+        const SPEED = 4;
+        const WORLD_W = 3000;
+        const WORLD_H = 3000;
+        const remoteEntities = new Map();
+        const serverBots = [];
+        const serverCollectibles = [];
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.vx = (Math.random() - 0.5) * 6;
+                this.vy = (Math.random() - 0.5) * 6;
+                this.life = 60;
+                this.maxLife = 60;
+                this.size = Math.random() * 4 + 2; // Size between 2 and 6
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life--;
+            }
+
+            draw() {
+                const alpha = this.life / this.maxLife;
+                ctx.fillStyle = `rgba(${this.color}, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        const cam = { x: 0, y: 0 };
+
+        function updateCamera() {
+            cam.x = Math.max(0, Math.min(predictedX, WORLD_W));
+            cam.y = Math.max(0, Math.min(predictedY, WORLD_H));
+        }
+
+        function updateInterpolation() {
+            remoteEntities.forEach(entity => {
+                entity.renderX += (entity.x - entity.renderX) * 0.2;
+                entity.renderY += (entity.y - entity.renderY) * 0.2;
+            });
+        }
+
+        socket.on('connect', () => {
+            socket.emit('requestLeaderboard');
+        });
+
+        socket.on('globalLeaderboard', (data) => {
+            const leaderboardDiv = document.getElementById('globalLeaderboard');
+            leaderboardDiv.innerHTML = data.map((player, index) => `<p>${index + 1}. ${player.username}: ${player.allTimeScore}</p>`).join('');
+        });
+
+        socket.on('roomJoined', (joinedRoomId, profile) => {
+            roomId = joinedRoomId;
+            playerProfile = profile;
+            hideLobby();
+            startCountdown();
+        });
+
+        socket.on('gameState', (state) => {
+            // Update game state logic here
+        });
+
+        socket.on('playerDied', (data) => {
+            if (data.playerId === playerId) {
+                spawnParticles(predictedX, predictedY, '255, 0, 0');
+                document.getElementById('finalScoreText').innerText = `Score: ${playerScore}`;
+                document.getElementById('bestScoreText').innerText = `Best Score: ${playerProfile.allTimeScore}`;
+                showDeathScreen();
+            }
+        });
+
+        function spawnParticles(x, y, color) {
+            for (let i = 0; i < 10; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        function showDeathScreen() {
+            document.getElementById('deathScreen').style.display = 'flex';
+            gameState = 'dead';
+        }
+
+        function hideDeathScreen() {
+            document.getElementById('deathScreen').style.display = 'none';
+        }
+
+        function hideLobby() {
+            document.getElementById('lobby').style.display = 'none';
+        }
+
+        function startCountdown() {
+            gameState = 'countdown';
+            document.getElementById('countdown').style.display = 'flex';
+            let countdownStep = 3;
+            const countdownText = document.getElementById('countdownText');
+
+            const countdownInterval = setInterval(() => {
+                if (countdownStep > 0) {
+                    countdownText.innerText = countdownStep;
+                    countdownStep--;
+                } else if (countdownStep === 0) {
+                    countdownText.innerText = 'GO!';
+                    countdownStep--;
+                } else {
+                    clearInterval(countdownInterval);
+                    document.getElementById('countdown').style.display = 'none';
+                    gameState = 'playing';
+                }
+            }, 1000);
+        }
+
+        document.getElementById('joinButton').onclick = () => {
+            const username = document.getElementById('nameInput').value;
+            socket.emit('joinRoom', username, roomId);
+        };
+
+        document.getElementById('respawnBtn').onclick = () => {
+            socket.emit('respawn');
+            hideDeathScreen();
+            gameState = 'playing';
+        };
+
+        document.getElementById('lobbyBtn').onclick = hideDeathScreen;
+
+        function updatePrediction() {
+            if (gameState === 'playing') {
+                let dx = 0;
+                let dy = 0;
+
+                // capturing key input is to be implemented 
+
+                // normalize dx and dy
+                dx = Math.max(-1, Math.min(1, dx));
+                dy = Math.max(-1, Math.min(1, dy));
+                predictedX += dx * SPEED;
+                predictedY += dy * SPEED;
+
+                predictedX = Math.max(0, Math.min(predictedX, WORLD_W));
+                predictedY = Math.max(0, Math.min(predictedY, WORLD_H));
+
+                if (dx !== 0 || dy !== 0) {
+                    socket.emit('playerInput', { dx, dy });
+                }
+            }
+        }
+
+        function drawWorld() {
+            ctx.save();
+            ctx.translate(-cam.x, -cam.y);
+
+            // Draw grid with fog-of-war
+            const gradient = ctx.createRadialGradient(predictedX, predictedY, 0, predictedX, predictedY, 200);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.strokeStyle = gradient;
+
+            for (let i = 0; i < WORLD_W; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, WORLD_H);
+                ctx.stroke();
+            }
+            for (let i = 0; i < WORLD_H; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(WORLD_W, i);
+                ctx.stroke();
+            }
+
+            // Draw collectibles if present
+            for (let collectible of serverCollectibles) {
+                ctx.shadowBlur = 10 + Math.sin(Date.now() / 500) * 5;
+                ctx.fillStyle = 'gold';
+                ctx.beginPath();
+                ctx.arc(collectible.x, collectible.y, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw bots
+            for (let bot of serverBots) {
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.arc(bot.x, bot.y, 15, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function drawParticles() {
+            particles.forEach((particle, index) => {
+                particle.update();
+                particle.draw();
+                if (particle.life < 1) {
+                    particles.splice(index, 1);
+                }
+            });
+        }
+
+        function drawHUD() {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(20, 20, 200, 16); // Background for HP
+            ctx.fillStyle = 'green';
+            const hpWidth = (playerHp / playerMaxHp) * 200;
+            ctx.fillRect(20, 20, hpWidth, 16); // HP Bar
+
+            ctx.fillStyle = 'white';
+            ctx.fillText(`Level: ${playerLevel}`, 20, 62);
+            ctx.fillText(`Score: ${playerScore}`, 20, 80);
+            ctx.fillText(`Ping: ${ping}`, canvas.width - 80, 20);
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (gameState === 'playing') {
+                updateCamera();
+                updatePrediction();
+                updateInterpolation();
+                drawWorld();
+                drawParticles();
+                drawHUD();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
